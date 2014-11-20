@@ -25,14 +25,14 @@ import Data.Hashable (Hashable(..))
 import Caching.ExpiringCacheMap.Internal (updateUses)
 import Caching.ExpiringCacheMap.Types
 
-newECM :: (Eq k, Hashable k) => (k -> IO v) -> (IO TimeUnits) -> Int -> Int -> ECMIncr -> ECMULength -> IO (ECM HM.HashMap k v)
+newECM :: (Eq k, Hashable k) => (k -> IO v) -> (IO TimeUnits) -> Int -> Int -> ECMIncr -> ECMULength -> IO (ECM IO MV.MVar HM.HashMap k v)
 newECM retr gettime minimumkeep expirytime timecheckmodulo removalsize = do
   m'maps <- MV.newMVar $ ( HM.empty, ([], 0), 0 )
-  return (m'maps, retr, gettime, minimumkeep, expirytime, timecheckmodulo, removalsize, removalsize*2)
+  return (m'maps, retr, gettime, minimumkeep, expirytime, timecheckmodulo, removalsize, removalsize*2, MV.modifyMVar, MV.readMVar)
 
-getECM :: (Eq k, Hashable k) => ECM HM.HashMap k v -> k -> IO v
+getECM :: (Monad m, Eq k, Hashable k) => ECM m mv HM.HashMap k v -> k -> m v
 getECM ecm id = do
-  MV.modifyMVar m'maps $
+  enter m'maps $
     \(maps, uses, incr) ->
       let incr' = incr + 1
        in if incr' < incr
@@ -56,7 +56,7 @@ getECM ecm id = do
               return ((filterExpired time maps, uses', incr'), m)
             else return ((maps, uses', incr'), m)
     
-    (m'maps, retr, gettime, minimumkeep, expirytime, timecheckmodulo, removalsize, compactlistsize) = ecm
+    (m'maps, retr, gettime, minimumkeep, expirytime, timecheckmodulo, removalsize, compactlistsize, enter, _ro) = ecm
     
     getKeepAndRemove =
       finalTup . splitAt minimumkeep . reverse . 
@@ -84,7 +84,7 @@ getECM ecm id = do
                    (accesstime > (time - expirytime)))
 
 getStats ecm = do
-  (maps, uses, incr) <- MV.readMVar m'uses
+  (maps, uses, incr) <- ro m'uses
   return uses
   where
-    (m'uses, retr, gettime, minimumkeep, expirytime, timecheckmodulo, removalsize, compactlistsize) = ecm
+    (m'uses, retr, gettime, minimumkeep, expirytime, timecheckmodulo, removalsize, compactlistsize, _enter, ro) = ecm

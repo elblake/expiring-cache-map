@@ -23,7 +23,7 @@ testWithThreads = do
             (\id -> do LBS.putStrLn id; return [])
             (do time <- POSIX.getPOSIXTime
                 return (round (time * 100)))
-            6 10 120 6 :: IO (ECM M.Map LBS.ByteString [Int])
+            6 10 120 6 :: IO (ECM IO MV.MVar M.Map LBS.ByteString [Int])
   forkIO $ do
     mapM_ (\a -> do
       b <- getECM ecm "test.2"

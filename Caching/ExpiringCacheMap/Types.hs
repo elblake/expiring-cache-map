@@ -23,11 +23,13 @@ import Data.Word (Word32)
 type TimeUnits = Int
 type ECMULength = Int
 type ECMIncr = Word32
-type ECM m k v = ( MV.MVar (m k (TimeUnits, v), ([(k, ECMIncr)], ECMULength), ECMIncr),
-                  k -> IO v,
-                  IO TimeUnits,
+type ECM a b m k v = ( b (m k (TimeUnits, v), ([(k, ECMIncr)], ECMULength), ECMIncr),
+                  k -> a v,
+                  a TimeUnits,
                   Int,
                   TimeUnits,
                   ECMIncr,
                   ECMULength,
-                  ECMULength)
+                  ECMULength,
+                  b (m k (TimeUnits, v), ([(k, ECMIncr)], ECMULength), ECMIncr) -> ((m k (TimeUnits, v), ([(k, ECMIncr)], ECMULength), ECMIncr) -> a ((m k (TimeUnits, v), ([(k, ECMIncr)], ECMULength), ECMIncr), v)) -> a v,
+                  b (m k (TimeUnits, v), ([(k, ECMIncr)], ECMULength), ECMIncr) -> a (m k (TimeUnits, v), ([(k, ECMIncr)], ECMULength), ECMIncr))
