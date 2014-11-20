@@ -1,0 +1,37 @@
+name:                expiring-cache-map
+version:             0.1.0.0
+synopsis:            General purpose simple caching.
+description:         
+    A simple general purpose shared state cache map with automatic expiration 
+    of values for caching the results of accessing a resource (such as reading 
+    a file), with variations for Ord and Hashable keys using "Data.Map.Strict"
+    and "Data.HashMap.Strict", respectively.
+
+homepage:            https://github.com/elblake/expiring-cache-map
+license:             BSD3
+license-file:        LICENSE
+author:              Edward L. Blake
+maintainer:          edwardlblake@gmail.com
+copyright:           (c) 2014 Edward L. Blake
+category:            Data
+build-type:          Simple
+cabal-version:       >=1.8
+
+extra-source-files:
+    README.md
+--    Test/WithThreads.hs
+
+library
+  exposed-modules:
+    Data.ExpiringCacheMap.OrdECM
+    Data.ExpiringCacheMap.HashECM
+    Data.ExpiringCacheMap.Internal
+    Data.ExpiringCacheMap.Types
+  -- other-modules:       
+  build-depends:       
+                       base == 4.*,
+                       bytestring >= 0.10.0.0,
+                       containers >= 0.5.0.0,
+                       hashable >= 1.0.1.1 && < 1.2,
+                       unordered-containers >= 0.2.0.0,
+                       time >= 1.0
