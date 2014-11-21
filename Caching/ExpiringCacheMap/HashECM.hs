@@ -7,14 +7,24 @@
 -- Stability: experimental
 -- Portability: portable
 --
--- Expiring cache map using Hashable keys with "Data.HashMap.Strict".
+-- A cache that holds values for a length of time that uses 'Hashable' keys
+-- with "Data.HashMap.Strict".
 -- 
 
 module Caching.ExpiringCacheMap.HashECM (
+    
+    -- * Create cache
+    -- newECMIO,
     newECM,
+    
+    -- * Request value from cache
     getECM,
-    getStats,
-    ECM
+    
+    -- * Type
+    ECM(..),
+    
+    -- * Miscellaneous
+    getStats
 ) where
 
 import qualified Control.Concurrent.MVar as MV
@@ -25,15 +35,46 @@ import Data.Hashable (Hashable(..))
 import Caching.ExpiringCacheMap.Internal (updateUses)
 import Caching.ExpiringCacheMap.Types
 
+-- | Creates a new expiring cache for the common usage case of retrieving
+-- uncached values via 'IO' interaction (such as in the case of reading a
+-- file from disk), with a shared state lock via an 'MV.MVar' to manage
+-- cache state.
+-- 
 newECM :: (Eq k, Hashable k) => (k -> IO v) -> (IO TimeUnits) -> Int -> Int -> ECMIncr -> ECMULength -> IO (ECM IO MV.MVar HM.HashMap k v)
 newECM retr gettime minimumkeep expirytime timecheckmodulo removalsize = do
-  m'maps <- MV.newMVar $ ( HM.empty, ([], 0), 0 )
-  return (m'maps, retr, gettime, minimumkeep, expirytime, timecheckmodulo, removalsize, removalsize*2, MV.modifyMVar, MV.readMVar)
+  m'maps <- MV.newMVar $ CacheState ( HM.empty, ([], 0), 0 )
+  return $ ECM (m'maps, retr, gettime, minimumkeep, expirytime, timecheckmodulo, removalsize, removalsize*2, MV.modifyMVar, MV.readMVar)
 
+-- | Request a value associated with a key from the cache.
+--
+--  * If the value is not in the cache, it will be requested through the 
+--    function defined through 'newECM', its computation returned and the
+--    value stored in the cache state map.
+--
+--  * If the value is in the cache, the modulo of the cache accumulator and
+--    the modulo value equates to 0 which causes a time request with the
+--    function defined through 'newECM', and the value has been determined
+--    to have since expired, it will be returned regardless for this 
+--    computation and the key will be removed along with other expired
+--    values from the cache state map.
+--
+--  * If the value is in the cache and has not expired, it will be returned.
+--
+-- Every getECM computation increments an accumulator in the cache state which 
+-- is used to keep track of the succession of key accesses. This history of
+-- key accesses is then used to remove entries from the cache back down to a
+-- minimum size. Also, when the modulo of the accumulator and the modulo value 
+-- computes to 0, the time request function defined with 'newECM' is invoked 
+-- for the current time to update which if any of the entries in the internal 
+-- map needs to be removed.
+--
+-- As the accumulator is a bound unsigned integer, when the accumulator 
+-- increments back to 0, the cache state is completely cleared.
+-- 
 getECM :: (Monad m, Eq k, Hashable k) => ECM m mv HM.HashMap k v -> k -> m v
 getECM ecm id = do
   enter m'maps $
-    \(maps, uses, incr) ->
+    \(CacheState (maps, uses, incr)) ->
       let incr' = incr + 1
        in if incr' < incr
             -- Word incrementor has cycled back to 0,
@@ -48,15 +89,15 @@ getECM ecm id = do
           r <- retr id
           time <- gettime
           let (newmaps,newuses) = insertAndPerhapsRemoveSome id time r maps uses'
-          return $! ((newmaps, newuses, incr'), r)
+          return $! (CacheState (newmaps, newuses, incr'), r)
         Just (accesstime, m) -> do
           if incr' `mod` timecheckmodulo == 0
             then do
               time <- gettime
-              return ((filterExpired time maps, uses', incr'), m)
-            else return ((maps, uses', incr'), m)
+              return (CacheState (filterExpired time maps, uses', incr'), m)
+            else return (CacheState (maps, uses', incr'), m)
     
-    (m'maps, retr, gettime, minimumkeep, expirytime, timecheckmodulo, removalsize, compactlistsize, enter, _ro) = ecm
+    ECM (m'maps, retr, gettime, minimumkeep, expirytime, timecheckmodulo, removalsize, compactlistsize, enter, _ro) = ecm
     
     getKeepAndRemove =
       finalTup . splitAt minimumkeep . reverse . 
@@ -84,7 +125,7 @@ getECM ecm id = do
                    (accesstime > (time - expirytime)))
 
 getStats ecm = do
-  (maps, uses, incr) <- ro m'uses
+  CacheState (maps, uses, incr) <- ro m'uses
   return uses
   where
-    (m'uses, retr, gettime, minimumkeep, expirytime, timecheckmodulo, removalsize, compactlistsize, _enter, ro) = ecm
+    ECM (m'uses, retr, gettime, minimumkeep, expirytime, timecheckmodulo, removalsize, compactlistsize, _enter, ro) = ecm

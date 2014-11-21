@@ -14,7 +14,8 @@ module Caching.ExpiringCacheMap.Types (
     TimeUnits,
     ECMULength,
     ECMIncr,
-    ECM
+    ECM(..),
+    CacheState(..)
 ) where
 
 import qualified Control.Concurrent.MVar as MV
@@ -23,7 +24,10 @@ import Data.Word (Word32)
 type TimeUnits = Int
 type ECMULength = Int
 type ECMIncr = Word32
-type ECM a b m k v = ( b (m k (TimeUnits, v), ([(k, ECMIncr)], ECMULength), ECMIncr),
+
+newtype CacheState m k v = CacheState (m k (TimeUnits, v), ([(k, ECMIncr)], ECMULength), ECMIncr)
+
+newtype ECM a b m k v = ECM ( b (CacheState m k v),
                   k -> a v,
                   a TimeUnits,
                   Int,
@@ -31,5 +35,5 @@ type ECM a b m k v = ( b (m k (TimeUnits, v), ([(k, ECMIncr)], ECMULength), ECMI
                   ECMIncr,
                   ECMULength,
                   ECMULength,
-                  b (m k (TimeUnits, v), ([(k, ECMIncr)], ECMULength), ECMIncr) -> ((m k (TimeUnits, v), ([(k, ECMIncr)], ECMULength), ECMIncr) -> a ((m k (TimeUnits, v), ([(k, ECMIncr)], ECMULength), ECMIncr), v)) -> a v,
-                  b (m k (TimeUnits, v), ([(k, ECMIncr)], ECMULength), ECMIncr) -> a (m k (TimeUnits, v), ([(k, ECMIncr)], ECMULength), ECMIncr))
+                  b (CacheState m k v) -> ((CacheState m k v) -> a ((CacheState m k v), v)) -> a v,
+                  b (CacheState m k v) -> a (CacheState m k v))
