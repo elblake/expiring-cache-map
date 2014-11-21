@@ -24,7 +24,7 @@ library
   exposed-modules:
     Caching.ExpiringCacheMap.OrdECM
     Caching.ExpiringCacheMap.HashECM
-    Caching.ExpiringCacheMap.Internal
+    Caching.ExpiringCacheMap.Internal.Internal
     Caching.ExpiringCacheMap.Types
   -- other-modules:       
   build-depends:       

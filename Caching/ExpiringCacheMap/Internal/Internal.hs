@@ -1,16 +1,17 @@
 {-# LANGUAGE OverloadedStrings #-}
 -- |
 -- Module : Caching.ExpiringCacheMap.Internal
--- Copyright: (c) 2014 Edward Blake
+-- Copyright: (c) 2014 Edward L. Blake
 -- License: BSD-style
 -- Maintainer: Edward L. Blake <edwardlblake@gmail.com>
 -- Stability: experimental
 -- Portability: portable
 --
--- Module with internal functions used by HashECM and OrdECM.
+-- A module with internal functions used in common by HashECM and OrdECM.
+-- Assume these functions to change from version to version.
 -- 
 
-module Caching.ExpiringCacheMap.Internal (
+module Caching.ExpiringCacheMap.Internal.Internal (
     updateUses,
     detECM
 ) where
