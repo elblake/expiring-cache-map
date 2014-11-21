@@ -38,7 +38,7 @@ import Caching.ExpiringCacheMap.Types
 -- a file from disk), with a shared state lock via an 'MV.MVar' to manage
 -- cache state.
 --
-newECM :: Ord k => (k -> IO v) -> (IO TimeUnits) -> Int -> Int -> ECMIncr -> ECMULength -> IO (ECM IO MV.MVar M.Map k v)
+newECM :: Ord k => (k -> IO v) -> (IO TimeUnits) -> ECMMapSize -> TimeUnits -> ECMIncr -> ECMULength -> IO (ECM IO MV.MVar M.Map k v)
 newECM retr gettime minimumkeep expirytime timecheckmodulo removalsize = do
   m'maps <- MV.newMVar $ CacheState ( M.empty, ([], 0), 0 )
   return $ ECM (m'maps, retr, gettime, minimumkeep, expirytime, timecheckmodulo, removalsize, removalsize*2, MV.modifyMVar, MV.readMVar)

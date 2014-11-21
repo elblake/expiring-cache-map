@@ -12,11 +12,10 @@
 
 module Caching.ExpiringCacheMap.Internal (
     updateUses,
-    detECM --getKeepAndRemove
+    detECM
 ) where
 
 import qualified Data.List as L
--- import Data.Word (Word32)
 
 import Caching.ExpiringCacheMap.Types
 
@@ -54,7 +53,7 @@ detECM
      -> TimeUnits
      -> ECMIncr
      -> mp k (TimeUnits, v)
-     -> ECMULength
+     -> ECMMapSize
      -> ECMULength
      -> m (CacheState mp k v, v)
 {-# INLINE detECM #-}
