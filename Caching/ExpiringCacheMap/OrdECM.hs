@@ -30,7 +30,7 @@ import qualified Control.Concurrent.MVar as MV
 import qualified Data.Map.Strict as M
 import qualified Data.List as L
 
-import Caching.ExpiringCacheMap.Internal (updateUses)
+import Caching.ExpiringCacheMap.Internal (updateUses, detECM)
 import Caching.ExpiringCacheMap.Types
 
 -- | Creates a new expiring cache for the common usage case of retrieving
@@ -81,47 +81,18 @@ getECM ecm id = do
             else getECM' (maps, uses, incr) incr'
   where
     
-    getECM' (maps, uses, incr) incr' = do
-      let uses' = updateUses uses id incr' compactlistsize (M.toList . M.fromList . reverse)
-      case M.lookup id maps of
-        Nothing -> do
-          r <- retr id
-          time <- gettime
-          let (newmaps,newuses) = insertAndPerhapsRemoveSome id time r maps uses'
-          return $! (CacheState (newmaps, newuses, incr'), r)
-        Just (accesstime, m) -> do
-          if incr' `mod` timecheckmodulo == 0
-            then do
-              time <- gettime
-              return (CacheState (filterExpired time maps, uses', incr'), m)
-            else return (CacheState (maps, uses', incr'), m)
-    
     ECM (m'maps, retr, gettime, minimumkeep, expirytime, timecheckmodulo, removalsize, compactlistsize, enter, _ro) = ecm
-    
-    getKeepAndRemove =
-      finalTup . splitAt minimumkeep . reverse . 
-          sortI . map swap2 . M.toList . M.fromList . reverse
-        where swap2 (a,b) = (b,a)
-              finalTup (l1,l2) = 
-                (map (\(c,k) -> (k,c)) l1, map (\(c,k) -> k) l2)
-              sortI = L.sortBy (\(l,_) (r,_) -> compare l r)
-    
-    insertAndPerhapsRemoveSome id time r maps uses =
-      if lcount >= removalsize
-        then 
-          let (keepuses, _removekeys) = getKeepAndRemove usesl
-              newmaps = M.insert id (time, r) $! M.intersection maps $ M.fromList keepuses
-           in (filterExpired time newmaps, (keepuses, L.length keepuses))
-        else
-          let newmaps = M.insert id (time, r) maps
-           in (filterExpired time newmaps, uses)
-      where
-        (usesl, lcount) = uses
-    
-    filterExpired time =
-      M.filter (\(accesstime, value) ->
-                 (accesstime <= time) &&
-                   (accesstime > (time - expirytime)))
+  
+    mnub = M.toList . M.fromList . reverse
+    getECM' (maps, uses, incr) incr' = do
+      let uses' = updateUses uses id incr' compactlistsize mnub
+      detECM (M.lookup id maps) (retr id)
+        (\time_r -> M.insert id time_r maps)
+        (\time_r keepuses -> M.insert id time_r $! M.intersection maps $ M.fromList keepuses)
+        mnub
+        gettime
+        M.filter
+        uses' incr' expirytime timecheckmodulo maps minimumkeep removalsize
 
 --
 --

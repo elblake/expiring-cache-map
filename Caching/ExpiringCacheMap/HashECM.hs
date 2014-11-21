@@ -32,7 +32,7 @@ import qualified Data.HashMap.Strict as HM
 import qualified Data.List as L
 import Data.Hashable (Hashable(..))
 
-import Caching.ExpiringCacheMap.Internal (updateUses)
+import Caching.ExpiringCacheMap.Internal (updateUses, detECM)
 import Caching.ExpiringCacheMap.Types
 
 -- | Creates a new expiring cache for the common usage case of retrieving
@@ -82,47 +82,20 @@ getECM ecm id = do
             then getECM' (HM.empty, ([], 0), 0) (0+1)
             else getECM' (maps, uses, incr) incr'
   where
-    getECM' (maps, uses, incr) incr' = do
-      let uses' = updateUses uses id incr' compactlistsize (HM.toList . HM.fromList . reverse)
-      case HM.lookup id maps of
-        Nothing -> do
-          r <- retr id
-          time <- gettime
-          let (newmaps,newuses) = insertAndPerhapsRemoveSome id time r maps uses'
-          return $! (CacheState (newmaps, newuses, incr'), r)
-        Just (accesstime, m) -> do
-          if incr' `mod` timecheckmodulo == 0
-            then do
-              time <- gettime
-              return (CacheState (filterExpired time maps, uses', incr'), m)
-            else return (CacheState (maps, uses', incr'), m)
-    
+  
     ECM (m'maps, retr, gettime, minimumkeep, expirytime, timecheckmodulo, removalsize, compactlistsize, enter, _ro) = ecm
     
-    getKeepAndRemove =
-      finalTup . splitAt minimumkeep . reverse . 
-          sortI . map swap2 . HM.toList . HM.fromList . reverse
-        where swap2 (a,b) = (b,a)
-              finalTup (l1,l2) = 
-                (map (\(c,k) -> (k,c)) l1, map (\(c,k) -> k) l2)
-              sortI = L.sortBy (\(l,_) (r,_) -> compare l r)
+    mnub = HM.toList . HM.fromList . reverse
+    getECM' (maps, uses, incr) incr' = do
+      let uses' = updateUses uses id incr' compactlistsize mnub
+      detECM (HM.lookup id maps) (retr id)
+        (\time_r -> HM.insert id time_r maps)
+        (\time_r keepuses -> HM.insert id time_r $! HM.intersection maps $ HM.fromList keepuses)
+        mnub
+        gettime
+        HM.filter
+        uses' incr' expirytime timecheckmodulo maps minimumkeep removalsize
     
-    insertAndPerhapsRemoveSome id time r maps uses =
-      if lcount >= removalsize
-        then 
-          let (keepuses, _removekeys) = getKeepAndRemove usesl
-              newmaps = HM.insert id (time, r) $! HM.intersection maps $ HM.fromList keepuses
-           in (filterExpired time newmaps, (keepuses, L.length keepuses))
-        else
-          let newmaps = HM.insert id (time, r) maps
-           in (filterExpired time newmaps, uses)
-      where
-        (usesl, lcount) = uses
-    
-    filterExpired time =
-      HM.filter (\(accesstime, value) ->
-                 (accesstime <= time) &&
-                   (accesstime > (time - expirytime)))
 
 getStats ecm = do
   CacheState (maps, uses, incr) <- ro m'uses
