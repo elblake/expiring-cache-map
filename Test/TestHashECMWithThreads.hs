@@ -6,7 +6,6 @@
 
 module Test.TestHashECMWithThreads where
 
--- Test
 import Control.Concurrent (forkIO, threadDelay)
 import qualified Data.Time.Clock.POSIX as POSIX (POSIXTime, getPOSIXTime)
 import qualified Data.ByteString.Lazy.Char8 as LBS
@@ -19,63 +18,63 @@ import Caching.ExpiringCacheMap.HashECM
 
 testWithThreads = do
   ecm <- newECMIO
-            (\id -> do LBS.putStrLn id; return [])
+            (consistentDuration 10
+              (\id -> do LBS.putStrLn id; return []))
             (do time <- POSIX.getPOSIXTime
                 return (round (time * 100)))
             120 
-            10 
             (CacheWithLRUList 6 6 12) :: IO (ECM IO MV.MVar HM.HashMap LBS.ByteString [Int])
   forkIO $ do
     mapM_ (\a -> do
-      b <- getECM ecm "test.2"
+      b <- lookupECM ecm "test.2"
       threadDelay 2
       return ())
       [0..400]
   forkIO $ do
     mapM_ (\a -> do
-      b <- getECM ecm "test.5"
+      b <- lookupECM ecm "test.5"
       threadDelay 5
       return ())
       [0..300]
   forkIO $ do
     mapM_ (\a -> do
-      b <- getECM ecm "test.7"
+      b <- lookupECM ecm "test.7"
       threadDelay 7
       return ())
       [0..300]
   forkIO $ do
     mapM_ (\a -> do
-      b <- getECM ecm "test.11"
+      b <- lookupECM ecm "test.11"
       threadDelay 11
       return ())
       [0..200]
   forkIO $ do
     mapM_ (\a -> do
-      b <- getECM ecm "test.13"
+      b <- lookupECM ecm "test.13"
       threadDelay 13
       return ())
       [0..200]
   forkIO $ do
     mapM_ (\a -> do
-      b <- getECM ecm "test.17"
+      b <- lookupECM ecm "test.17"
       threadDelay 17
       return ())
       [0..200]
   forkIO $ do
     mapM_ (\a -> do
-      b <- getECM ecm "test.111"
+      b <- lookupECM ecm "test.111"
       threadDelay 111
       return ())
       [0..20]
   forkIO $ do
     mapM_ (\a -> do
-      b <- getECM ecm "test.109"
+      b <- lookupECM ecm "test.109"
       threadDelay 109
       return ())
       [0..20]
   forkIO $ do
     mapM_ (\a -> do
-      b <- getECM ecm "test.1091"
+      b <- lookupECM ecm "test.1091"
       threadDelay 1091
       return ())
       [0..5]

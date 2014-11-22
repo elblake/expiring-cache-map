@@ -34,10 +34,10 @@ newtype CacheState m k v =
 
 -- | The type that encapsulates a cache map.
 newtype ECM a b m k v = ECM ( b (CacheState m k v),
-                  k -> a v,
+                  k -> a (TimeUnits, v),
                   a TimeUnits,
                   ECMMapSize,
-                  TimeUnits,
+                  -- TimeUnits,
                   ECMIncr,
                   ECMULength,
                   ECMULength,

@@ -42,7 +42,7 @@ updateUses uses id incr' compactlistsize compactUses =
 detECM
   :: (Monad m, Eq k) =>
      Maybe (TimeUnits, TimeUnits, v)
-     -> m v
+     -> m (TimeUnits, v)
      -> ((TimeUnits, TimeUnits, v) -> mp k (TimeUnits, TimeUnits, v))
      -> ((TimeUnits, TimeUnits, v) -> [(k, ECMIncr)] -> mp k (TimeUnits, TimeUnits, v))
      -> ([(k, ECMIncr)] -> [(k, ECMIncr)])
@@ -52,25 +52,24 @@ detECM
      -> ([(k, ECMIncr)], ECMULength)
      -> ECMIncr
      -> ECMIncr
-     -> TimeUnits
      -> mp k (TimeUnits, TimeUnits, v)
      -> ECMMapSize
      -> ECMULength
-       -> m (CacheState mp k v, v)
+       -> m ((CacheState mp k v, v), Bool)
 {-# INLINE detECM #-}
-detECM result retr_id insert_id1 insert_id2 mnub gettime filt uses' incr' timecheckmodulo expirytime maps minimumkeep removalsize = 
+detECM result retr_id insert_id1 insert_id2 mnub gettime filt uses' incr' timecheckmodulo maps minimumkeep removalsize = 
     case result of
         Nothing -> do
-          r <- retr_id
+          (expirytime, r) <- retr_id
           time <- gettime
           let (newmaps,newuses) = insertAndPerhapsRemoveSome time r expirytime uses'
-          return $! (CacheState (newmaps, newuses, incr'), r)
+          return $! ((CacheState (newmaps, newuses, incr'), r), False)
         Just (_accesstime, _expirytime, m) -> do
           if incr' `mod` timecheckmodulo == 0
             then do
               time <- gettime
-              return (CacheState (filterExpired time maps, uses', incr'), m)
-            else return (CacheState (maps, uses', incr'), m)
+              return ((CacheState (filterExpired time maps, uses', incr'), m), True)
+            else return ((CacheState (maps, uses', incr'), m), False)
   where
   
     getKeepAndRemove =

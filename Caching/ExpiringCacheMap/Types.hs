@@ -30,7 +30,6 @@ module Caching.ExpiringCacheMap.Types (
 import Caching.ExpiringCacheMap.Utils.Types
 import Caching.ExpiringCacheMap.Internal.Types
 
--- expirytime 
 data CacheSettings =
   CacheWithLRUList {
     mapsize :: ECMMapSize,

@@ -22,7 +22,7 @@
 -- > 
 -- > module TestSequenceExample where
 -- > 
--- > import Caching.ExpiringCacheMap.HashECM (newECMForM, getECM, CacheSettings(..))
+-- > import Caching.ExpiringCacheMap.HashECM (newECMForM, lookupECM, CacheSettings(..), consistentDuration)
 -- > import qualified Caching.ExpiringCacheMap.Utils.TestSequence as TestSeq
 -- > 
 -- > import qualified Data.ByteString.Char8 as BS
@@ -34,11 +34,11 @@
 -- >   where
 -- >     test' = do
 -- >       filecache <- newECMForM
--- >             (\_id -> do number <- TestSeq.readNumber
--- >                         return number)
+-- >             (consistentDuration 100 -- Duration between access and expiry time of each item.
+-- >               (\_id -> do number <- TestSeq.readNumber
+-- >                           return number))
 -- >             (TestSeq.getCurrentTime >>= return)
 -- >             12000 -- Time check frequency: (accumulator `mod` this_number) == 0.
--- >             100   -- Duration between access and expiry time of each item.
 -- >             (CacheWithLRUList 
 -- >               6   -- Expected size of key-value map when removing elements.
 -- >               6   -- Size of list when to remove items from key-value map.
@@ -46,10 +46,10 @@
 -- >               )
 -- >             TestSeq.newTestSVar TestSeq.enterTestSVar TestSeq.readTestSVar
 -- >       
--- >       -- Use getECM whenever the contents of "file1" is needed.
--- >       b <- getECM filecache ("file1" :: BS.ByteString)
--- >       b <- getECM filecache "file1"
--- >       b <- getECM filecache "file2"
+-- >       -- Use lookupECM whenever the contents of "file1" is needed.
+-- >       b <- lookupECM filecache ("file1" :: BS.ByteString)
+-- >       b <- lookupECM filecache "file1"
+-- >       b <- lookupECM filecache "file2"
 -- >       return b
 -- >
 --
