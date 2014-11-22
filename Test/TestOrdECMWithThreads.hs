@@ -13,13 +13,11 @@ import qualified Data.ByteString.Lazy.Char8 as LBS
 
 import qualified Control.Concurrent.MVar as MV
 import qualified Data.Map as M
-import qualified Data.List as L
-import Data.Word (Word32)
 
 import Caching.ExpiringCacheMap.OrdECM
 
 testWithThreads = do
-  ecm <- newECM
+  ecm <- newECMIO
             (\id -> do LBS.putStrLn id; return [])
             (do time <- POSIX.getPOSIXTime
                 return (round (time * 100)))

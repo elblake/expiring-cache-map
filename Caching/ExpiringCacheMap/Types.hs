@@ -42,7 +42,7 @@ type ECMULength = Int
 type ECMIncr = Word32
 
 -- | The cache state.
-newtype CacheState m k v = CacheState (m k (TimeUnits, v), ([(k, ECMIncr)], ECMULength), ECMIncr)
+newtype CacheState m k v = CacheState (m k (TimeUnits, TimeUnits, v), ([(k, ECMIncr)], ECMULength), ECMIncr)
 
 type ECMNewState a b m k v = (CacheState m k v) -> a (b (CacheState m k v))
 
