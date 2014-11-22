@@ -21,10 +21,11 @@ module Caching.ExpiringCacheMap.OrdECM (
     getECM,
     
     -- * Type
-    ECM(..)
+    ECM,
+    CacheSettings(..)
     
     -- -- * Miscellaneous
-    -- , getStats
+    , getStats
 ) where
 
 import qualified Control.Concurrent.MVar as MV
@@ -33,16 +34,18 @@ import qualified Data.List as L
 
 import Caching.ExpiringCacheMap.Internal.Internal (updateUses, detECM)
 import Caching.ExpiringCacheMap.Types
+import Caching.ExpiringCacheMap.Internal.Types
 
 -- | Create a new expiring cache for retrieving uncached values via 'IO'
 -- interaction (such as in the case of reading a file from disk), with
 -- a shared state lock via an 'MV.MVar' to manage cache state.
 --
 newECMIO :: Ord k => (k -> IO v) -> (IO TimeUnits)
-  -> ECMMapSize -> TimeUnits -> ECMIncr -> ECMULength
+  -> ECMIncr -> TimeUnits -- -- -> ECMMapSize -> ECMULength
+  -> CacheSettings
     -> IO (ECM IO MV.MVar M.Map k v)
-newECMIO retr gettime minimumkeep expirytime timecheckmodulo removalsize = do
-  newECMForM retr gettime minimumkeep expirytime timecheckmodulo removalsize
+newECMIO retr gettime timecheckmodulo expirytime settings = do
+  newECMForM retr gettime timecheckmodulo expirytime settings
     MV.newMVar MV.modifyMVar MV.readMVar
 
 -- | Create a new expiring cache along arbitrary monads with provided
@@ -50,12 +53,13 @@ newECMIO retr gettime minimumkeep expirytime timecheckmodulo removalsize = do
 -- cache state in 'Monad' m1.
 --
 newECMForM :: (Monad m1, Monad m2) => Ord k => (k -> m1 v) -> (m1 TimeUnits)
-  -> ECMMapSize -> TimeUnits -> ECMIncr -> ECMULength
+  -> ECMIncr -> TimeUnits -- -> ECMMapSize -> ECMULength
+  -> CacheSettings
   -> ECMNewState m2 mv M.Map k v
   -> ECMEnterState m1 mv M.Map k v
   -> ECMReadState m1 mv M.Map k v
     -> m2 (ECM m1 mv M.Map k v)
-newECMForM retr gettime minimumkeep expirytime timecheckmodulo removalsize
+newECMForM retr gettime timecheckmodulo expirytime (CacheWithLRUList minimumkeep removalsize compactlistsize)
            newstate enterstate readstate = do
   m'maps <- newstate $ CacheState ( M.empty, ([], 0), 0 )
   return $ ECM ( m'maps, retr, gettime, minimumkeep, expirytime,

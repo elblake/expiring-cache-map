@@ -22,7 +22,7 @@
 -- > 
 -- > module TestSequenceExample where
 -- > 
--- > import Caching.ExpiringCacheMap.HashECM (newECMForM, getECM)
+-- > import Caching.ExpiringCacheMap.HashECM (newECMForM, getECM, CacheSettings(..))
 -- > import qualified Caching.ExpiringCacheMap.Utils.TestSequence as TestSeq
 -- > 
 -- > import qualified Data.ByteString.Char8 as BS
@@ -37,10 +37,13 @@
 -- >             (\_id -> do number <- TestSeq.readNumber
 -- >                         return number)
 -- >             (TestSeq.getCurrentTime >>= return)
--- >             6     -- Expected size of key-value map when removing elements.
+-- >             12000 -- Time check frequency: (accumulator `mod` this_number) == 0.
 -- >             100   -- Duration between access and expiry time of each item.
--- >             12000 -- time check frequency: (accumulator `mod` this_number) == 0.
--- >             6     -- Size at when to remove items from key-value map.
+-- >             (CacheWithLRUList 
+-- >               6   -- Expected size of key-value map when removing elements.
+-- >               6   -- Size of list when to remove items from key-value map.
+-- >               12  -- Size of list when to compact
+-- >               )
 -- >             TestSeq.newTestSVar TestSeq.enterTestSVar TestSeq.readTestSVar
 -- >       
 -- >       -- Use getECM whenever the contents of "file1" is needed.

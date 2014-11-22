@@ -19,6 +19,7 @@ module Caching.ExpiringCacheMap.Internal.Internal (
 import qualified Data.List as L
 
 import Caching.ExpiringCacheMap.Types
+import Caching.ExpiringCacheMap.Internal.Types
 
 updateUses :: (Eq k) => ([(k, ECMIncr)], ECMULength) -> k
   -> ECMIncr -> ECMULength -> ([(k, ECMIncr)] -> [(k, ECMIncr)])

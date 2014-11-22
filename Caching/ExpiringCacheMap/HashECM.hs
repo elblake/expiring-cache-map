@@ -21,10 +21,11 @@ module Caching.ExpiringCacheMap.HashECM (
     getECM,
     
     -- * Type
-    ECM(..)
+    ECM,
+    CacheSettings(..)
     
     -- -- * Miscellaneous
-    -- , getStats
+    , getStats
 ) where
 
 import qualified Control.Concurrent.MVar as MV
@@ -34,16 +35,18 @@ import Data.Hashable (Hashable(..))
 
 import Caching.ExpiringCacheMap.Internal.Internal (updateUses, detECM)
 import Caching.ExpiringCacheMap.Types
+import Caching.ExpiringCacheMap.Internal.Types
 
 -- | Create a new expiring cache for retrieving uncached values via 'IO'
 -- interaction (such as in the case of reading a file from disk), with 
 -- a shared state lock via an 'MV.MVar' to manage cache state.
 -- 
 newECMIO :: (Eq k, Hashable k) => (k -> IO v) -> (IO TimeUnits)
-  -> ECMMapSize -> TimeUnits -> ECMIncr -> ECMULength
+  -> ECMIncr -> TimeUnits -- -> ECMMapSize -> ECMULength
+  -> CacheSettings
     -> IO (ECM IO MV.MVar HM.HashMap k v)
-newECMIO retr gettime minimumkeep expirytime timecheckmodulo removalsize = do
-  newECMForM retr gettime minimumkeep expirytime timecheckmodulo removalsize
+newECMIO retr gettime timecheckmodulo expirytime cachesettings = do
+  newECMForM retr gettime timecheckmodulo expirytime cachesettings
     MV.newMVar MV.modifyMVar MV.readMVar
   
 -- | Create a new expiring cache along arbitrary monads with provided
@@ -51,16 +54,17 @@ newECMIO retr gettime minimumkeep expirytime timecheckmodulo removalsize = do
 -- cache state in 'Monad' m1.
 --
 newECMForM :: (Monad m1, Monad m2) => (Eq k, Hashable k) => (k -> m1 v) -> (m1 TimeUnits)
-  -> ECMMapSize -> TimeUnits -> ECMIncr -> ECMULength
+  -> ECMIncr -> TimeUnits -- -> ECMMapSize -> ECMULength
+  -> CacheSettings
   -> ECMNewState m2 mv HM.HashMap k v
   -> ECMEnterState m1 mv HM.HashMap k v
   -> ECMReadState m1 mv HM.HashMap k v
     -> m2 (ECM m1 mv HM.HashMap k v)
-newECMForM retr gettime minimumkeep expirytime timecheckmodulo removalsize
+newECMForM retr gettime timecheckmodulo expirytime (CacheWithLRUList minimumkeep removalsize compactlistsize)
            newstate enterstate readstate = do
   m'maps <- newstate $ CacheState ( HM.empty, ([], 0), 0 )
   return $ ECM ( m'maps, retr, gettime, minimumkeep, expirytime,
-                 timecheckmodulo, removalsize, removalsize*2,
+                 timecheckmodulo, removalsize, compactlistsize,
                  enterstate, readstate )
 
 
