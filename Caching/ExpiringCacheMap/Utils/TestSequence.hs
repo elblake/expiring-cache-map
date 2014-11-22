@@ -21,26 +21,56 @@ module Caching.ExpiringCacheMap.Utils.TestSequence (
     runTestSequence,
     newTestSVar,
     enterTestSVar,
-    -- putTestSVar,
     readTestSVar,
     getCurrentTime,
     readNumber,
+    TestSequenceEvents(..),
     TestSequenceState(..),
     TestSequence(..),
     TestSVar(..)
 ) where
 
---import qualified Data.ByteString.Char8 as BS
 import Data.Word (Word32)
 
+data TestSequenceEvents = 
+  GetVar Word32 |
+  PutVar Word32 |
+  GetTime Word32 |
+  ReadNumber Int |
+  HaveNumber Int
+  deriving (Eq)
+
+instance Show TestSequenceEvents where
+  show (GetVar a)     = "GetVar " ++ (show a)
+  show (PutVar a)     = "PutVar " ++ (show a)
+  show (GetTime a)    = "GetTime " ++ (show a)
+  show (ReadNumber a) = "ReadNumber " ++ (show a)
+  show (HaveNumber a) = "HaveNumber " ++ (show a)
+
+
 newtype TestSequenceState b =
-  TestSequenceState (Word32, [Word32], Maybe b)
+  TestSequenceState (Word32, [TestSequenceEvents], Maybe b)
   
 instance Show (TestSequenceState ct) where
-  show (TestSequenceState (a,b,_)) = "TestSequenceState " ++ (show a) ++ " " ++ (show b)
+  show (TestSequenceState (a,b,_)) =
+    "TestSequenceState " ++ (show a) ++ " " ++ (show b)
 
 newtype TestSequence b a =
   TestSequence (TestSequenceState b -> (TestSequenceState b, a))
+
+newtype TestSVar a = TestSVar a
+
+
+instance Monad (TestSequence a) where
+  TestSequence fun >>= k =
+    TestSequence
+      (\state -> let (state', ret) = (fun state)
+                     TestSequence fun' = k ret
+                  in fun' state')
+  return ret = 
+    TestSequence $
+      \(TestSequenceState (timer, hl, testsvar)) ->
+       (TestSequenceState (timer+1,hl, testsvar), ret)
 
 runTestSequence :: Show a => TestSequence b a -> IO (TestSequenceState b, a)
 runTestSequence f = do
@@ -51,8 +81,6 @@ runTestSequence f = do
     TestSequence fun = (TestSequence
       (\(TestSequenceState (t, hl, testsvar)) ->
         (TestSequenceState (t+1, hl, testsvar), ()))) >> f
-
-newtype TestSVar a = TestSVar a
 
 newTestSVar :: a -> TestSequence a (TestSVar a)
 newTestSVar var = TestSequence $
@@ -66,16 +94,12 @@ enterTestSVar testsvar fun = do
   putTestSVar testsvar teststate'
   return passalong
 
---TestSequence $
---  \(TestSequenceState (timer, hl, testsvar)) ->
---   -- TestSequence (TestSequenceState b -> (TestSequenceState b, a))
---   let (testsvar', passalong) = (fun testsvar)
---    in (TestSequenceState (timer+1, hl, testsvar'), passalong)
-
+-- 'putTestSVar' is used along with 'readTestSVar' to implement enterTestSVar.
+--
 putTestSVar :: TestSVar a -> a -> TestSequence a a
 putTestSVar _testsvar testsvar' = TestSequence $
   \(TestSequenceState (timer, hl, testsvar)) ->
-   (TestSequenceState (timer+1, hl, Just testsvar'),
+   (TestSequenceState (timer+1, (PutVar timer) : hl, Just testsvar'),
       case testsvar of
         Nothing -> testsvar'
         Just testsvar'' -> testsvar'')
@@ -83,25 +107,23 @@ putTestSVar _testsvar testsvar' = TestSequence $
 readTestSVar :: TestSVar a -> TestSequence a a
 readTestSVar _testsvar = TestSequence $
   \(TestSequenceState (timer, hl, Just testsvar)) ->
-   (TestSequenceState (timer+1, hl, Just testsvar), testsvar)
+   (TestSequenceState (timer+1, (GetVar timer) : hl, Just testsvar), testsvar)
 
 getCurrentTime :: TestSequence a Int
 getCurrentTime = TestSequence $
   \(TestSequenceState (timer, hl, testsvar)) ->
-   (TestSequenceState (timer+1, hl, testsvar), fromIntegral timer)
+   (TestSequenceState (timer+1, (GetTime timer) : hl, testsvar), fromIntegral timer)
 
 readNumber :: TestSequence a Int
 readNumber = TestSequence $
   \(TestSequenceState (timer, hl, testsvar)) ->
-   (TestSequenceState (timer+1, hl, testsvar), fromIntegral timer)
+    let number = fromIntegral timer
+     in (TestSequenceState (timer+1, (ReadNumber number) : hl, testsvar), number)
 
-instance Monad (TestSequence a) where
-  TestSequence fun >>= k =
-    TestSequence
-      (\state -> let (state', ret) = (fun state)
-                     TestSequence fun' = k ret
-                  in fun' state')
-  return ret = 
-    TestSequence $
-      \(TestSequenceState (timer, hl, testsvar)) ->
-       (TestSequenceState (timer+1,hl, testsvar), ret)
+haveNumber :: Int -> TestSequence a ()
+haveNumber number = TestSequence $
+  \(TestSequenceState (timer, hl, testsvar)) ->
+   (TestSequenceState (timer+1, (HaveNumber number) : hl, testsvar), ())
+
+
+
