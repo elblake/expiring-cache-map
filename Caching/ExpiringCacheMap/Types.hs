@@ -30,6 +30,10 @@ import qualified Control.Concurrent.MVar as MV
 import Data.Word (Word32)
 
 -- | Integer involved in the time units used to determine when an item expires.
+-- The time units used can be any arbitrary integer time representation, such
+-- as seconds or milliseconds for examples. They can also be deterministic time
+-- steps in a sequencing monad.
+--
 type TimeUnits = Int
 
 -- | Integer involved in the size of a key-value map.
