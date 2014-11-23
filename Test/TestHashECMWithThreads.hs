@@ -15,6 +15,7 @@ import qualified Data.HashMap.Strict as HM
 import Data.Hashable (Hashable(..))
 
 import Caching.ExpiringCacheMap.HashECM
+import Caching.ExpiringCacheMap.Internal.Internal (getStatsString)
 
 testWithThreads = do
   ecm <- newECMIO
@@ -79,6 +80,6 @@ testWithThreads = do
       return ())
       [0..5]
   threadDelay 2000000
-  c <- getStats ecm
-  putStrLn (show c)
+  c <- getStatsString ecm
+  putStrLn c
   return ()

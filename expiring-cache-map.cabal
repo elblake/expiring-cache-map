@@ -8,6 +8,7 @@ description:
     and "Data.HashMap.Strict", respectively.
 
 homepage:            https://github.com/elblake/expiring-cache-map
+bug-reports:         https://github.com/elblake/expiring-cache-map/issues
 license:             BSD3
 license-file:        LICENSE
 author:              Edward L. Blake
@@ -25,8 +26,10 @@ library
     Caching.ExpiringCacheMap.OrdECM
     Caching.ExpiringCacheMap.HashECM
     Caching.ExpiringCacheMap.Internal.Internal
+    Caching.ExpiringCacheMap.Internal.Types
     Caching.ExpiringCacheMap.Types
     Caching.ExpiringCacheMap.Utils.TestSequence
+    Caching.ExpiringCacheMap.Utils.Types
   -- other-modules:       
   build-depends:       
     base == 4.*,

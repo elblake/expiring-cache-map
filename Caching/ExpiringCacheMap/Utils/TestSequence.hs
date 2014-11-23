@@ -6,17 +6,7 @@
 -- Stability: experimental
 -- Portability: portable
 --
--- TestSequence Monad for testing caching behaviour.
--- 
--- > test = do
--- >   runTestSequence (do
--- >     a <- getCurrentTime
--- >     if a == 0
--- >       then do b <- readNumber
--- >               return (a,b)
--- >       else do return (a,-8)) 0
---
---
+-- TestSequence monad for testing caching behaviour.
 --
 -- > {-# LANGUAGE OverloadedStrings #-}
 -- > 
@@ -48,14 +38,16 @@
 -- >       
 -- >       -- Use lookupECM whenever the contents of "file1" is needed.
 -- >       b <- lookupECM filecache ("file1" :: BS.ByteString)
+-- >       TestSeq.haveNumber b
 -- >       b <- lookupECM filecache "file1"
 -- >       b <- lookupECM filecache "file2"
+-- >       TestSeq.haveNumber b
 -- >       return b
 -- >
 --
 -- >>> test
--- (TestSequenceState 24 [PutVar 21,GetTime 18,ReadNumber 16,GetVar 15,PutVar 13,
--- GetVar 11,PutVar 9,GetTime 6,ReadNumber 4,GetVar 3],16)
+-- [GetVar 3,ReadNumber 4,GetTime 7,PutVar 11,HaveNumber 4,GetVar 14,PutVar 17,
+--  GetVar 19,ReadNumber 20,GetTime 23,PutVar 27,HaveNumber 20]
 -- 
 --
 

@@ -14,6 +14,7 @@ import qualified Control.Concurrent.MVar as MV
 import qualified Data.Map as M
 
 import Caching.ExpiringCacheMap.OrdECM
+import Caching.ExpiringCacheMap.Internal.Internal (getStatsString)
 
 testWithThreads = do
   ecm <- newECMIO
@@ -78,6 +79,6 @@ testWithThreads = do
       return ())
       [0..5]
   threadDelay 2000000
-  c <- getStats ecm
-  putStrLn (show c)
+  c <- getStatsString ecm
+  putStrLn c
   return ()

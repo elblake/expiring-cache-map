@@ -13,7 +13,8 @@
 
 module Caching.ExpiringCacheMap.Internal.Internal (
     updateUses,
-    detECM
+    detECM,
+    getStatsString
 ) where
 
 import qualified Data.List as L
@@ -96,3 +97,14 @@ detECM result retr_id insert_id1 insert_id2 mnub gettime filt uses' incr' timech
       filt (\(accesstime, expirytime, value) ->
                  (accesstime <= time) &&
                    (accesstime > (time - expirytime)))
+
+
+-- | Debugging function
+--
+getStatsString ecm = do
+  CacheState (maps, uses, incr) <- ro m'uses
+  return $ show uses
+  where
+    ECM ( m'uses, _retr, _gettime, _minimumkeep, _timecheckmodulo, _removalsize,
+          _compactlistsize, _enter, ro ) = ecm
+

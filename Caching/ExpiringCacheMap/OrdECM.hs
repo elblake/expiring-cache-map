@@ -10,7 +10,41 @@
 -- A cache that holds values for a length of time that uses 'Ord' keys with 
 -- "Data.Map.Strict".
 -- 
+-- An example of creating a cache for accessing files:
+--
+-- > {-# LANGUAGE OverloadedStrings #-}
+-- > module Example where
 -- > 
+-- > import Caching.ExpiringCacheMap.OrdECM (newECMIO, lookupECM, CacheSettings(..), consistentDuration)
+-- > 
+-- > import qualified Data.Time.Clock.POSIX as POSIX (POSIXTime, getPOSIXTime)
+-- > import qualified Data.ByteString.Char8 as BS
+-- > import System.IO (withFile, IOMode(ReadMode))
+-- > 
+-- > example = do
+-- >   filecache <- newECMIO
+-- >         (consistentDuration 100 -- Duration between access and expiry time of each item
+-- >           (\id -> do BS.putStrLn "Reading a file again..."
+-- >                      withFile (case id :: BS.ByteString of
+-- >                                  "file1" -> "file1.txt"
+-- >                                  "file2" -> "file2.txt")
+-- >                               ReadMode $
+-- >                        \fh -> BS.hGetContents fh >>= (return $!)))
+-- >         (do time <- POSIX.getPOSIXTime
+-- >             return (round (time * 100)))
+-- >         12000 -- Time check frequency: (accumulator `mod` this_number) == 0.
+-- >         (CacheWithLRUList
+-- >           6     -- Expected size of key-value map when removing elements.
+-- >           6     -- Size of list when to remove items from key-value map.
+-- >           12    -- Size of list when to compact
+-- >           )
+-- >   
+-- >   -- Use lookupECM whenever the contents of "file1" is needed.
+-- >   b <- lookupECM filecache "file1"
+-- >   BS.putStrLn b
+-- >   return ()
+-- > 
+--
 
 module Caching.ExpiringCacheMap.OrdECM (
     -- * Create cache
@@ -20,14 +54,10 @@ module Caching.ExpiringCacheMap.OrdECM (
     
     -- * Request value from cache
     lookupECM,
-    lookupECMUpd,
     
     -- * Type
     ECM,
     CacheSettings(..)
-    
-    -- -- * Miscellaneous
-    , getStats
 ) where
 
 import qualified Control.Concurrent.MVar as MV
@@ -72,66 +102,27 @@ newECMForM retr gettime timecheckmodulo (CacheWithLRUList minimumkeep removalsiz
 --  * If the value is not in the cache, it will be requested through the 
 --    function defined through 'newECM', its computation returned and the
 --    value stored in the cache state map.
---
---  * If the value is in the cache and a new time is computed with the
---    function defined through 'newECM' in the same lookup, and the value
---    has been determined to have since expired, it will be returned
---    regardless for this computation and the key will be removed along
---    with other expired values from the cache state map. Use 'lookupECMUpd'
---    to have the opposite behaviour.
---
+-- 
 --  * If the value is in the cache and has not expired, it will be returned.
 --
--- Every lookupECM computation increments an accumulator in the cache state which 
--- is used to keep track of the succession of key accesses. This history of
--- key accesses is then used to remove entries from the cache back down to a
--- minimum size. Also, when the modulo of the accumulator and the modulo value 
--- computes to 0, the time request function defined with 'newECM' is invoked 
--- for the current time to determine of which if any of the entries in the
--- cache state map needs to be removed.
+--  * If the value is in the cache and a new time is computed in the same
+--    lookup, and the value has been determined to have since expired, it 
+--    will be discarded and a new value will be requested for this computation.
 --
--- As the accumulator is a bound unsigned integer, when the accumulator 
+-- Every 'lookupECM' computation increments an accumulator in the cache state 
+-- which is used to keep track of the succession of key accesses. This history 
+-- of key accesses is then used to remove entries from the cache back down to 
+-- a minimum size. Also, when the modulo of the accumulator and the modulo 
+-- value computes to 0, the time request function defined when the 'ECM' value
+-- was created is invoked for the current time to determine of which if any of
+-- the entries in the cache state map needs to be removed. In some cases the 
+-- accumulator may get incremented more than once in a 'lookupECM' computation.
+--
+-- As the accumulator is a bound unsigned integer, when the accumulator
 -- increments back to 0, the cache state is completely cleared.
 -- 
 lookupECM :: (Monad m, Ord k) => ECM m mv M.Map k v -> k -> m v
 lookupECM ecm id = do
-  enter m'maps $
-    \(CacheState (maps, uses, incr)) ->
-      let incr' = incr + 1
-       in if incr' < incr
-            -- Word incrementor has cycled back to 0,
-            -- so may as well clear the cache completely.
-            then lookupECM' (M.empty, ([], 0), 0) (0+1)
-            else lookupECM' (maps, uses, incr) incr'
-  where
-    
-    ECM ( m'maps, retr, gettime, minimumkeep, timecheckmodulo, removalsize,
-          compactlistsize, enter, _ro ) = ecm
-  
-    mnub = M.toList . M.fromList . reverse
-    lookupECM' (maps, uses, incr) incr' = do
-      let uses' = updateUses uses id incr' compactlistsize mnub
-      (ret, _) <-
-          detECM (M.lookup id maps) (retr id)
-            (\time_r -> M.insert id time_r maps)
-            (\time_r keepuses -> M.insert id time_r $! M.intersection maps $ M.fromList keepuses)
-            mnub
-            gettime
-            M.filter
-            uses' incr' timecheckmodulo maps minimumkeep removalsize
-      return ret
-
-
--- | Request a value associated with a key from the cache.
--- 
--- This function differs from 'lookupECM' only in the case that the value being
--- requested also causes a new time to have been computed during the same lookup,
--- and have been found to be out of date. When the condition happens, a new
--- version of the value will be requested with the function defined through
--- 'newECM' and possibly some removals.
--- 
-lookupECMUpd :: (Monad m, Ord k) => ECM m mv M.Map k v -> k -> m v
-lookupECMUpd ecm id = do
   enter m'maps $
     \(CacheState (maps, uses, incr)) ->
       let incr' = incr + 1
@@ -166,20 +157,48 @@ lookupECMUpd ecm id = do
         uses' incr' timecheckmodulo maps minimumkeep removalsize
     
 
+{-
+-- This function differs from 'lookupECM' only in the case that the value
+-- being requested also causes a new time to have been computed during the 
+-- same lookup, and have been found to be out of date. When the condition 
+-- happens, this function returns the old cached value without attempting
+-- to request a new value, despite being out of date. However, it does
+-- clear the key from the key-value store for the next request.
+--
+lookupECMUse :: (Monad m, Ord k) => ECM m mv M.Map k v -> k -> m v
+lookupECMUse ecm id = do
+  enter m'maps $
+    \(CacheState (maps, uses, incr)) ->
+      let incr' = incr + 1
+       in if incr' < incr
+            -- Word incrementor has cycled back to 0,
+            -- so may as well clear the cache completely.
+            then lookupECM' (M.empty, ([], 0), 0) (0+1)
+            else lookupECM' (maps, uses, incr) incr'
+  where
+    
+    ECM ( m'maps, retr, gettime, minimumkeep, timecheckmodulo, removalsize,
+          compactlistsize, enter, _ro ) = ecm
+  
+    mnub = M.toList . M.fromList . reverse
+    lookupECM' (maps, uses, incr) incr' = do
+      let uses' = updateUses uses id incr' compactlistsize mnub
+      (ret, _) <-
+          detECM (M.lookup id maps) (retr id)
+            (\time_r -> M.insert id time_r maps)
+            (\time_r keepuses -> M.insert id time_r $! M.intersection maps $ M.fromList keepuses)
+            mnub
+            gettime
+            M.filter
+            uses' incr' timecheckmodulo maps minimumkeep removalsize
+      return ret
+-}
+
+
 -- | Used with 'newECMIO' or 'newECMForM' to provide a consistent duration for requested values.
 consistentDuration :: (Monad m, Ord k) => TimeUnits -> (k -> m v) -> (k -> m (TimeUnits, v))
 consistentDuration duration fun =
   \id -> do
     ret <- fun id
     return (duration, ret)
-
-
--- Debugging function
---
-getStats ecm = do
-  CacheState (maps, uses, incr) <- ro m'uses
-  return uses
-  where
-    ECM ( m'uses, _retr, _gettime, _minimumkeep, _timecheckmodulo, _removalsize,
-          _compactlistsize, _enter, ro ) = ecm
 
