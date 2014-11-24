@@ -24,9 +24,9 @@
 -- >   where
 -- >     test' = do
 -- >       filecache <- newECMForM
--- >             (consistentDuration 100 -- Duration between access and expiry time of each item.
+-- >             (consistentDuration 100 -- Duration between access and expiry time of each item, no state needed.
 -- >               (\state _id -> do number <- TestSeq.readNumber
--- >                           return (state, number)))
+-- >                                 return (state, number)))
 -- >             (TestSeq.getCurrentTime >>= return)
 -- >             12000 -- Time check frequency: (accumulator `mod` this_number) == 0.
 -- >             (CacheWithLRUList 

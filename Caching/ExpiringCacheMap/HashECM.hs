@@ -25,12 +25,12 @@
 -- >   filecache <- newECMIO
 -- >         (consistentDuration 100 -- Duration between access and expiry time of each item
 -- >           (\state id -> do BS.putStrLn "Reading a file again..."
--- >                      withFile (case id :: BS.ByteString of
--- >                                  "file1" -> "file1.txt"
--- >                                  "file2" -> "file2.txt")
+-- >                            withFile (case id :: BS.ByteString of
+-- >                                        "file1" -> "file1.txt"
+-- >                                        "file2" -> "file2.txt")
 -- >                               ReadMode $
--- >                        \fh -> do content <- BS.hGetContents fh
--- >                                  return $! (state, content)))
+-- >                               \fh -> do content <- BS.hGetContents fh
+-- >                                         return $! (state, content)))
 -- >         (do time <- POSIX.getPOSIXTime
 -- >             return (round (time * 100)))
 -- >         12000 -- Time check frequency: (accumulator `mod` this_number) == 0.

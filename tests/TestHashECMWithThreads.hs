@@ -1,19 +1,20 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 --
--- Test OrdECM with threads
+-- Test HashECM with threads
 --
 
-module Test.TestOrdECMWithThreads where
+module TestHashECMWithThreads where
 
 import Control.Concurrent (forkIO, threadDelay)
 import qualified Data.Time.Clock.POSIX as POSIX (POSIXTime, getPOSIXTime)
 import qualified Data.ByteString.Lazy.Char8 as LBS
 
 import qualified Control.Concurrent.MVar as MV
-import qualified Data.Map as M
+import qualified Data.HashMap.Strict as HM
+import Data.Hashable (Hashable(..))
 
-import Caching.ExpiringCacheMap.OrdECM
+import Caching.ExpiringCacheMap.HashECM
 import Caching.ExpiringCacheMap.Internal.Internal (getStatsString)
 
 testWithThreads = do
@@ -22,8 +23,8 @@ testWithThreads = do
               (\state id -> do LBS.putStrLn id; return (state, [])))
             (do time <- POSIX.getPOSIXTime
                 return (round (time * 100)))
-            120
-            (CacheWithLRUList 6 6 12 ) :: IO (ECM IO MV.MVar () M.Map LBS.ByteString [Int])
+            120 
+            (CacheWithLRUList 6 6 12) :: IO (ECM IO MV.MVar () HM.HashMap LBS.ByteString [Int])
   forkIO $ do
     mapM_ (\a -> do
       b <- lookupECM ecm "test.2"
