@@ -95,7 +95,7 @@ newtype TestSequence b a =
 
 newtype TestSVar a = TestSVar a
 
-
+-- TODO: Add instance to Applicative per GHC 7.10 warning
 instance Monad (TestSequence a) where
   TestSequence fun >>= k =
     TestSequence
