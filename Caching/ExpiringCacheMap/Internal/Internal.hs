@@ -43,7 +43,8 @@ updateUses uses id incr' compactlistsize compactUses =
 detECM
   :: (Monad m, Eq k) =>
      Maybe (TimeUnits, TimeUnits, v)
-     -> m (TimeUnits, v)
+     -> Maybe s
+     -> m (TimeUnits, (Maybe s, v))
      -> ((TimeUnits, TimeUnits, v) -> mp k (TimeUnits, TimeUnits, v))
      -> ((TimeUnits, TimeUnits, v) -> [(k, ECMIncr)] -> mp k (TimeUnits, TimeUnits, v))
      -> ([(k, ECMIncr)] -> [(k, ECMIncr)])
@@ -56,21 +57,21 @@ detECM
      -> mp k (TimeUnits, TimeUnits, v)
      -> ECMMapSize
      -> ECMULength
-       -> m ((CacheState mp k v, v), Bool)
+       -> m ((CacheState s mp k v, v), Bool)
 {-# INLINE detECM #-}
-detECM result retr_id insert_id1 insert_id2 mnub gettime filt uses' incr' timecheckmodulo maps minimumkeep removalsize = 
+detECM result retr_state retr_id insert_id1 insert_id2 mnub gettime filt uses' incr' timecheckmodulo maps minimumkeep removalsize = 
     case result of
         Nothing -> do
-          (expirytime, r) <- retr_id
+          (expirytime, (retr_state', r)) <- retr_id
           time <- gettime
           let (newmaps,newuses) = insertAndPerhapsRemoveSome time r expirytime uses'
-          return $! ((CacheState (newmaps, newuses, incr'), r), False)
+          return $! ((CacheState (retr_state', newmaps, newuses, incr'), r), False)
         Just (_accesstime, _expirytime, m) -> do
           if incr' `mod` timecheckmodulo == 0
             then do
               time <- gettime
-              return ((CacheState (filterExpired time maps, uses', incr'), m), True)
-            else return ((CacheState (maps, uses', incr'), m), False)
+              return ((CacheState (retr_state, filterExpired time maps, uses', incr'), m), True)
+            else return ((CacheState (retr_state, maps, uses', incr'), m), False)
   where
   
     getKeepAndRemove =
@@ -102,7 +103,7 @@ detECM result retr_id insert_id1 insert_id2 mnub gettime filt uses' incr' timech
 -- | Debugging function
 --
 getStatsString ecm = do
-  CacheState (maps, uses, incr) <- ro m'uses
+  CacheState (_retr_state, _maps, uses, _incr) <- ro m'uses
   return $ show uses
   where
     ECM ( m'uses, _retr, _gettime, _minimumkeep, _timecheckmodulo, _removalsize,

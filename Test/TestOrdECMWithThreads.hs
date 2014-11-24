@@ -19,11 +19,11 @@ import Caching.ExpiringCacheMap.Internal.Internal (getStatsString)
 testWithThreads = do
   ecm <- newECMIO
             (consistentDuration 10
-              (\id -> do LBS.putStrLn id; return []))
+              (\state id -> do LBS.putStrLn id; return (state, [])))
             (do time <- POSIX.getPOSIXTime
                 return (round (time * 100)))
             120
-            (CacheWithLRUList 6 6 12 ) :: IO (ECM IO MV.MVar M.Map LBS.ByteString [Int])
+            (CacheWithLRUList 6 6 12 ) :: IO (ECM IO MV.MVar () M.Map LBS.ByteString [Int])
   forkIO $ do
     mapM_ (\a -> do
       b <- lookupECM ecm "test.2"

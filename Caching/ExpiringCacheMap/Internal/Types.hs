@@ -22,24 +22,24 @@ module Caching.ExpiringCacheMap.Internal.Types (
 import qualified Control.Concurrent.MVar as MV
 import Caching.ExpiringCacheMap.Utils.Types
 
-type ECMNewState a b m k v = (CacheState m k v) -> a (b (CacheState m k v))
+type ECMNewState a b s m k v = (CacheState s m k v) -> a (b (CacheState s m k v))
 
-type ECMEnterState a b m k v = b (CacheState m k v) -> ((CacheState m k v) -> a ((CacheState m k v), v)) -> a v
+type ECMEnterState a b s m k v = b (CacheState s m k v) -> ((CacheState s m k v) -> a ((CacheState s m k v), v)) -> a v
 
-type ECMReadState a b m k v = b (CacheState m k v) -> a (CacheState m k v)
+type ECMReadState a b s m k v = b (CacheState s m k v) -> a (CacheState s m k v)
 
 -- | The cache state.
-newtype CacheState m k v =
-  CacheState (m k (TimeUnits, TimeUnits, v), ([(k, ECMIncr)], ECMULength), ECMIncr)
+newtype CacheState s m k v =
+  CacheState (Maybe s, m k (TimeUnits, TimeUnits, v), ([(k, ECMIncr)], ECMULength), ECMIncr)
 
 -- | The type that encapsulates a cache map.
-newtype ECM a b m k v = ECM ( b (CacheState m k v),
-                  k -> a (TimeUnits, v),
+newtype ECM a b s m k v = ECM ( b (CacheState s m k v),
+                  Maybe s -> k -> a (TimeUnits, (Maybe s, v)),
                   a TimeUnits,
                   ECMMapSize,
                   -- TimeUnits,
                   ECMIncr,
                   ECMULength,
                   ECMULength,
-                  ECMEnterState a b m k v,
-                  ECMReadState a b m k v)
+                  ECMEnterState a b s m k v,
+                  ECMReadState a b s m k v)

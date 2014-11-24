@@ -24,12 +24,13 @@
 -- > example = do
 -- >   filecache <- newECMIO
 -- >         (consistentDuration 100 -- Duration between access and expiry time of each item
--- >           (\id -> do BS.putStrLn "Reading a file again..."
+-- >           (\state id -> do BS.putStrLn "Reading a file again..."
 -- >                      withFile (case id :: BS.ByteString of
 -- >                                  "file1" -> "file1.txt"
 -- >                                  "file2" -> "file2.txt")
 -- >                               ReadMode $
--- >                        \fh -> BS.hGetContents fh >>= (return $!)))
+-- >                        \fh -> do content <- BS.hGetContents fh
+-- >                                  return $! (state, content)))
 -- >         (do time <- POSIX.getPOSIXTime
 -- >             return (round (time * 100)))
 -- >         12000 -- Time check frequency: (accumulator `mod` this_number) == 0.
@@ -74,10 +75,10 @@ import Caching.ExpiringCacheMap.Internal.Types
 -- interaction (such as in the case of reading a file from disk), with 
 -- a shared state lock via an 'MV.MVar' to manage cache state.
 -- 
-newECMIO :: (Eq k, Hashable k) => (k -> IO (TimeUnits, v)) -> (IO TimeUnits)
+newECMIO :: (Eq k, Hashable k) => (Maybe s -> k -> IO (TimeUnits, (Maybe s, v))) -> (IO TimeUnits)
   -> ECMIncr 
   -> CacheSettings
-    -> IO (ECM IO MV.MVar HM.HashMap k v)
+    -> IO (ECM IO MV.MVar s HM.HashMap k v)
 newECMIO retr gettime timecheckmodulo cachesettings = do
   newECMForM retr gettime timecheckmodulo cachesettings
     MV.newMVar MV.modifyMVar MV.readMVar
@@ -86,16 +87,16 @@ newECMIO retr gettime timecheckmodulo cachesettings = do
 -- functions to create cache state in 'Monad' m2, and modify and read
 -- cache state in 'Monad' m1.
 --
-newECMForM :: (Monad m1, Monad m2) => (Eq k, Hashable k) => (k -> m1 (TimeUnits, v)) -> (m1 TimeUnits)
+newECMForM :: (Monad m1, Monad m2) => (Eq k, Hashable k) => (Maybe s -> k -> m1 (TimeUnits, (Maybe s, v))) -> (m1 TimeUnits)
   -> ECMIncr 
   -> CacheSettings
-  -> ECMNewState m2 mv HM.HashMap k v
-  -> ECMEnterState m1 mv HM.HashMap k v
-  -> ECMReadState m1 mv HM.HashMap k v
-    -> m2 (ECM m1 mv HM.HashMap k v)
+  -> ECMNewState m2 mv s HM.HashMap k v
+  -> ECMEnterState m1 mv s HM.HashMap k v
+  -> ECMReadState m1 mv s HM.HashMap k v
+    -> m2 (ECM m1 mv s HM.HashMap k v)
 newECMForM retr gettime timecheckmodulo (CacheWithLRUList minimumkeep removalsize compactlistsize)
            newstate enterstate readstate = do
-  m'maps <- newstate $ CacheState ( HM.empty, ([], 0), 0 )
+  m'maps <- newstate $ CacheState ( Nothing, HM.empty, ([], 0), 0 )
   return $ ECM ( m'maps, retr, gettime, minimumkeep, 
                  timecheckmodulo, removalsize, compactlistsize,
                  enterstate, readstate )
@@ -125,34 +126,34 @@ newECMForM retr gettime timecheckmodulo (CacheWithLRUList minimumkeep removalsiz
 -- As the accumulator is a bound unsigned integer, when the accumulator
 -- increments back to 0, the cache state is completely cleared.
 -- 
-lookupECM :: (Monad m, Eq k, Hashable k) => ECM m mv HM.HashMap k v -> k -> m v
+lookupECM :: (Monad m, Eq k, Hashable k) => ECM m mv s HM.HashMap k v -> k -> m v
 lookupECM ecm id = do
   enter m'maps $
-    \(CacheState (maps, uses, incr)) ->
+    \(CacheState (retr_state, maps, uses, incr)) ->
       let incr' = incr + 1
        in if incr' < incr
             -- Word incrementor has cycled back to 0,
             -- so may as well clear the cache completely.
-            then lookupECM' (HM.empty, ([], 0), 0) (0+1)
-            else lookupECM' (maps, uses, incr) incr'
+            then lookupECM' (retr_state, HM.empty, ([], 0), 0) (0+1)
+            else lookupECM' (retr_state, maps, uses, incr) incr'
   where
   
     ECM ( m'maps, retr, gettime, minimumkeep, timecheckmodulo, removalsize, 
           compactlistsize, enter, _ro ) = ecm
     
     mnub = HM.toList . HM.fromList . reverse
-    lookupECM' (maps, uses, incr) incr' = do
+    lookupECM' (retr_state, maps, uses, incr) incr' = do
       let uses' = updateUses uses id incr' compactlistsize mnub
-      (ret, do_again) <- det maps uses' incr'
+      (ret, do_again) <- det retr_state maps uses' incr'
       if do_again
-        then do let (CacheState (maps', uses'', incr''), _) = ret
+        then do let (CacheState (retr_state', maps', uses'', incr''), _) = ret
                     uses''' = updateUses uses'' id incr'' compactlistsize mnub
-                (ret', _) <- det maps' uses''' incr''
+                (ret', _) <- det retr_state' maps' uses''' incr''
                 return ret'
         else return ret
     
-    det maps uses' incr' =
-      detECM (HM.lookup id maps) (retr id)
+    det retr_state maps uses' incr' =
+      detECM (HM.lookup id maps) retr_state (retr retr_state id)
         (\time_r -> HM.insert id time_r maps)
         (\time_r keepuses -> HM.insert id time_r $! HM.intersection maps $ HM.fromList keepuses)
         mnub
@@ -169,26 +170,26 @@ lookupECM ecm id = do
 -- to request a new value, despite being out of date. However, it does
 -- clear the key from the key-value store for the next request.
 -- 
-lookupECMUse :: (Monad m, Eq k, Hashable k) => ECM m mv HM.HashMap k v -> k -> m v
+lookupECMUse :: (Monad m, Eq k, Hashable k) => ECM m mv s HM.HashMap k v -> k -> m v
 lookupECMUse ecm id = do
   enter m'maps $
-    \(CacheState (maps, uses, incr)) ->
+    \(CacheState (retr_state, maps, uses, incr)) ->
       let incr' = incr + 1
        in if incr' < incr
             -- Word incrementor has cycled back to 0,
             -- so may as well clear the cache completely.
-            then lookupECM' (HM.empty, ([], 0), 0) (0+1)
-            else lookupECM' (maps, uses, incr) incr'
+            then lookupECM' (retr_state, HM.empty, ([], 0), 0) (0+1)
+            else lookupECM' (retr_state, maps, uses, incr) incr'
   where
   
     ECM ( m'maps, retr, gettime, minimumkeep, timecheckmodulo, removalsize, 
           compactlistsize, enter, _ro ) = ecm
     
     mnub = HM.toList . HM.fromList . reverse
-    lookupECM' (maps, uses, incr) incr' = do
+    lookupECM' (retr_state, maps, uses, incr) incr' = do
       let uses' = updateUses uses id incr' compactlistsize mnub
       (ret, _) <-
-          detECM (HM.lookup id maps) (retr id)
+          detECM (HM.lookup id maps) retr_state (retr retr_state id)
             (\time_r -> HM.insert id time_r maps)
             (\time_r keepuses -> HM.insert id time_r $! HM.intersection maps $ HM.fromList keepuses)
             mnub
@@ -200,9 +201,9 @@ lookupECMUse ecm id = do
 
 
 -- | Used with 'newECMIO' or 'newECMForM' to provide a consistent duration for requested values.
-consistentDuration :: (Monad m, Eq k, Hashable k) => TimeUnits -> (k -> m v) -> (k -> m (TimeUnits, v))
+consistentDuration :: (Monad m, Eq k, Hashable k) => TimeUnits -> (Maybe s -> k -> m (Maybe s, v)) -> (Maybe s -> k -> m (TimeUnits, (Maybe s, v)))
 consistentDuration duration fun =
-  \id -> do
-    ret <- fun id
+  \state id -> do
+    ret <- fun state id
     return (duration, ret)
 

@@ -13,8 +13,8 @@ main = do
 
   filecache <- newECMIO
         (consistentDuration 100
-          (\id -> do BS.putStrLn "Reading a file again..."
-                     return [])) -- : >>= \r -> return $! r
+          (\state id -> do BS.putStrLn "Reading a file again..."
+                           return (state, []))) -- : >>= \r -> return $! r
         (do time <- POSIX.getPOSIXTime
             return (round (time * 100)))
         12000 -- Value to modulo with cache state accumulator to determine time check frequency.
