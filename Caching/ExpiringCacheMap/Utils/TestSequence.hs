@@ -45,10 +45,24 @@
 -- >       return b
 -- >
 --
+-- Evaluating the @test@ function results in a list of events.
+--
 -- >>> test
 -- [GetVar 3,ReadNumber 4,GetTime 7,PutVar 11,HaveNumber 4,GetVar 14,PutVar 17,
 --  GetVar 19,ReadNumber 20,GetTime 23,PutVar 27,HaveNumber 20]
 -- 
+-- In this example the history shows 2 time accesses (@GetTime 7@ and
+-- @GetTime 23@) since the time check frequency number is a high value (12000),
+-- but regardless the high value a time check is still requested again because
+-- of the new key request for @"file2"@.
+--
+-- Changing the time frequency to 1 will alter the list of events with more
+-- frequent time checks:
+--
+-- >>> test
+-- [GetVar 3,ReadNumber 4,GetTime 7,PutVar 11,HaveNumber 4,GetVar 14,GetTime 15,
+--  GetTime 18,PutVar 22,GetVar 24,ReadNumber 25,GetTime 28,PutVar 32,
+--  HaveNumber 25]
 --
 
 module Caching.ExpiringCacheMap.Utils.TestSequence (

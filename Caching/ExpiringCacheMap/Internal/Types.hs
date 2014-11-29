@@ -7,7 +7,8 @@
 -- Stability: experimental
 -- Portability: portable
 --
--- Internal types.
+-- Types used by internal functions and as the opaque types exported by other 
+-- modules, assume these type definitions to change from version to version.
 -- 
 
 module Caching.ExpiringCacheMap.Internal.Types (
@@ -30,7 +31,7 @@ type ECMReadState a b s m k v = b (CacheState s m k v) -> a (CacheState s m k v)
 
 -- | The cache state.
 newtype CacheState s m k v =
-  CacheState (Maybe s, m k (TimeUnits, TimeUnits, v), ([(k, ECMIncr)], ECMULength), ECMIncr)
+  CacheState (Maybe s, m k (TimeUnits, TimeUnits, v), ECMMapSize, ([(k, ECMIncr)], ECMULength), ECMIncr)
 
 -- | The type that encapsulates a cache map.
 newtype ECM a b s m k v = ECM ( b (CacheState s m k v),
