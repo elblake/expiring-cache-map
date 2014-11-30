@@ -10,8 +10,6 @@
 --
 -- > {-# LANGUAGE OverloadedStrings #-}
 -- > 
--- > module TestSequenceExample where
--- > 
 -- > import Caching.ExpiringCacheMap.HashECM (newECMForM, lookupECM, CacheSettings(..), consistentDuration)
 -- > import qualified Caching.ExpiringCacheMap.Utils.TestSequence as TestSeq
 -- > 
@@ -31,7 +29,7 @@
 -- >             12000 -- Time check frequency: (accumulator `mod` this_number) == 0.
 -- >             (CacheWithLRUList 
 -- >               6   -- Expected size of key-value map when removing elements.
--- >               6   -- Size of list when to remove items from key-value map.
+-- >               6   -- Size of map when to remove items from key-value map.
 -- >               12  -- Size of list when to compact
 -- >               )
 -- >             TestSeq.newTestSVar TestSeq.enterTestSVar TestSeq.readTestSVar

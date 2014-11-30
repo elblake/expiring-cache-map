@@ -13,7 +13,6 @@
 -- An example of creating a cache for accessing files:
 --
 -- > {-# LANGUAGE OverloadedStrings #-}
--- > module Example where
 -- > 
 -- > import Caching.ExpiringCacheMap.OrdECM (newECMIO, lookupECM, CacheSettings(..), consistentDuration)
 -- > 
@@ -33,10 +32,10 @@
 -- >                                         return $! (state, content)))
 -- >         (do time <- POSIX.getPOSIXTime
 -- >             return (round (time * 100)))
--- >         12000 -- Time check frequency: (accumulator `mod` this_number) == 0.
+-- >         1 -- Time check frequency: (accumulator `mod` this_number) == 0.
 -- >         (CacheWithLRUList
 -- >           6     -- Expected size of key-value map when removing elements.
--- >           6     -- Size of list when to remove items from key-value map.
+-- >           6     -- Size of map when to remove items from key-value map.
 -- >           12    -- Size of list when to compact
 -- >           )
 -- >   
@@ -127,7 +126,7 @@ newECMForM :: (Monad m1, Monad m2) => Ord k => (Maybe s -> k -> m1 (TimeUnits, (
     -> m2 (ECM m1 mv s M.Map k v)
 newECMForM retr gettime timecheckmodulo (CacheWithLRUList minimumkeep removalsize compactlistsize)
            newstate enterstate readstate =
-  if timecheckmodulo <= 1
+  if timecheckmodulo <= 0
     then error "Modulo time check must be 1 or higher."
     else do
       m'maps <- newstate $ CacheState ( Nothing, M.empty, 0, ([], 0), 0 )

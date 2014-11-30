@@ -4,9 +4,11 @@
 -- Test HashECM with threads
 --
 
-module TestHashECMWithThreads where
+module TestHashECMWithThreads (
+    testWithThreads
+) where
 
-import Control.Concurrent (forkIO, threadDelay)
+import Control.Concurrent (forkIO, threadDelay, yield)
 import qualified Data.Time.Clock.POSIX as POSIX (POSIXTime, getPOSIXTime)
 import qualified Data.ByteString.Lazy.Char8 as LBS
 
@@ -17,7 +19,16 @@ import Data.Hashable (Hashable(..))
 import Caching.ExpiringCacheMap.HashECM
 import Caching.ExpiringCacheMap.Internal.Internal (getStatsString)
 
+import System.Timeout (timeout)
+import System.Exit (exitFailure)
+
 testWithThreads = do
+  res <- timeout 60000000 testWithThreads'
+  case res of
+    Nothing -> exitFailure
+    Just () -> return ()
+
+testWithThreads' = do
   ecm <- newECMIO
             (consistentDuration 10
               (\state id -> do LBS.putStrLn id; return (state, [])))
@@ -25,61 +36,83 @@ testWithThreads = do
                 return (round (time * 100)))
             120 
             (CacheWithLRUList 6 6 12) :: IO (ECM IO MV.MVar () HM.HashMap LBS.ByteString [Int])
+  t1 <- MV.newEmptyMVar
   forkIO $ do
     mapM_ (\a -> do
       b <- lookupECM ecm "test.2"
-      threadDelay 2
+      yield --threadDelay 2
       return ())
-      [0..400]
+      [0..500]
+    MV.putMVar t1 True
+  t2 <- MV.newEmptyMVar
+  forkIO $ do
+    mapM_ (\a -> do
+      b <- lookupECM ecm "test.3"
+      yield --threadDelay 3
+      return ())
+      [0..333]
+    MV.putMVar t2 True
+  t3 <- MV.newEmptyMVar
   forkIO $ do
     mapM_ (\a -> do
       b <- lookupECM ecm "test.5"
-      threadDelay 5
+      yield -- threadDelay 5
       return ())
-      [0..300]
+      [0..200]
+    MV.putMVar t3 True
+  t4 <- MV.newEmptyMVar
   forkIO $ do
     mapM_ (\a -> do
       b <- lookupECM ecm "test.7"
-      threadDelay 7
+      yield -- threadDelay 7
       return ())
-      [0..300]
+      [0..142]
+    MV.putMVar t4 True
+  t5 <- MV.newEmptyMVar
   forkIO $ do
     mapM_ (\a -> do
       b <- lookupECM ecm "test.11"
-      threadDelay 11
+      yield -- threadDelay 11
       return ())
-      [0..200]
+      [0..90]
+    MV.putMVar t5 True
+  t6 <- MV.newEmptyMVar
   forkIO $ do
     mapM_ (\a -> do
       b <- lookupECM ecm "test.13"
-      threadDelay 13
+      yield -- threadDelay 13
       return ())
-      [0..200]
+      [0..76]
+    MV.putMVar t6 True
+  t7 <- MV.newEmptyMVar
   forkIO $ do
     mapM_ (\a -> do
       b <- lookupECM ecm "test.17"
-      threadDelay 17
+      yield -- threadDelay 17
       return ())
-      [0..200]
+      [0..58]
+    MV.putMVar t7 True
+  t8 <- MV.newEmptyMVar
   forkIO $ do
     mapM_ (\a -> do
-      b <- lookupECM ecm "test.111"
-      threadDelay 111
+      b <- lookupECM ecm "test.19"
+      yield -- threadDelay 19
       return ())
-      [0..20]
+      [0..52]
+    MV.putMVar t8 True
+  t9 <- MV.newEmptyMVar
   forkIO $ do
     mapM_ (\a -> do
-      b <- lookupECM ecm "test.109"
-      threadDelay 109
+      b <- lookupECM ecm "test.23"
+      yield -- threadDelay 23
       return ())
-      [0..20]
-  forkIO $ do
-    mapM_ (\a -> do
-      b <- lookupECM ecm "test.1091"
-      threadDelay 1091
-      return ())
-      [0..5]
-  threadDelay 2000000
+      [0..43]
+    MV.putMVar t9 True
+  untilDone [t1,t2,t3,t4,t5,t6,t7,t8,t9]
   c <- getStatsString ecm
   putStrLn c
   return ()
+  where
+    untilDone [] = return ()
+    untilDone (t:tr) = MV.takeMVar t >> untilDone tr
+      
