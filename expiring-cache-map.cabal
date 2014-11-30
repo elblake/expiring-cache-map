@@ -64,5 +64,6 @@ test-suite test-sequence
       hashable >= 1.0.1.1 && < 1.2,
       unordered-containers >= 0.2.0.0
     other-modules:
+      TestECMWithTestSequenceCommon
       TestHashECMWithTestSequence
       TestOrdECMWithTestSequence
