@@ -1,3 +1,5 @@
+{-# LANGUAGE CPP #-}
+
 -- |
 -- Module : Caching.ExpiringCacheMap.Utils.TestSequence
 -- Copyright: (c) 2014 Edward L. Blake
@@ -77,6 +79,10 @@ module Caching.ExpiringCacheMap.Utils.TestSequence (
     TestSVar(..)
 ) where
 
+#if (!defined(__GLASGOW_HASKELL__)) || (__GLASGOW_HASKELL__ < 710)
+import Control.Applicative (Applicative(..))
+#endif
+import Control.Monad (ap, liftM)
 import Data.Word (Word32)
 
 data TestSequenceEvents = 
@@ -107,7 +113,14 @@ newtype TestSequence b a =
 
 newtype TestSVar a = TestSVar a
 
--- TODO: Add instance to Applicative per GHC 7.10 warning
+-- For GHC 7.10
+instance Functor (TestSequence a) where
+  fmap = liftM
+  
+instance Applicative (TestSequence a) where
+  pure = return
+  (<*>) = ap
+
 instance Monad (TestSequence a) where
   TestSequence fun >>= k =
     TestSequence
