@@ -56,11 +56,15 @@ module Caching.ExpiringCacheMap.OrdECM (
     lookupECM,
     
     -- * Value request function state
-    -- putValReqState,
     getValReqState,
     
-    -- -- * Clear cache
-    -- clearCache,
+    -- * Invalidate cache
+    invalidate,
+    invalidateCache,
+    
+    -- * List keys
+    keysCached,
+    keysNotExpired,
     
     -- * Type
     ECM,
@@ -71,7 +75,7 @@ import qualified Control.Concurrent.MVar as MV
 import qualified Data.Map.Strict as M
 import qualified Data.List as L
 
-import Caching.ExpiringCacheMap.Internal.Internal (updateUses, detECM)
+import Caching.ExpiringCacheMap.Internal.Internal (updateUses, detECM, detNotExpired)
 import Caching.ExpiringCacheMap.Types
 import Caching.ExpiringCacheMap.Internal.Types
 
@@ -212,6 +216,82 @@ getValReqState ecm id = do
   return retr_state
   where
     ECM ( m'maps, _, _, _, _, _, _, _, read ) = ecm
+
+
+-- | Invalidates a key from the cache and returns its value if any.
+--   Note this is a sequential composition of a read and modify of the
+--   mutable cache container (readMVar and modifyMVar with newECMIO).
+--
+invalidate :: (Monad m, Ord k) => ECM m mv s M.Map k v -> k -> m (Maybe v)
+invalidate ecm id = do
+  CacheState (_, maps0, _, _, _) <- read m'maps
+  case M.lookup id maps0 of
+    Just time_prev0 -> do
+      prev0' <- enter m'maps $
+        \(CacheState (retr_state, maps, mapsize, uses, incr)) ->
+          let (_, _, prev) =
+                case M.lookup id maps of
+                  Just time_prev -> time_prev
+                  Nothing -> time_prev0
+              maps' = M.delete id maps
+           in return (CacheState (retr_state, maps', mapsize, uses, incr), prev)
+      return $ Just prev0'
+    Nothing -> return Nothing
+  where
+    ECM ( m'maps, _, _, _, _, _, compactlistsize, enter, read ) = ecm
+
+
+-- | Invalidates a key from the cache and returns the last key and value if any.
+--   Note this is a sequential composition of a read and modify of the
+--   mutable cache container (readMVar and modifyMVar with newECMIO).
+--
+invalidateCache :: (Monad m, Ord k) => ECM m mv s M.Map k v -> m (Maybe (k, v))
+invalidateCache ecm = do
+  CacheState (_, maps0, _, (uses0, _), _) <- read m'maps
+  case (M.toList $ M.intersection (M.fromList uses0) maps0) of
+    [] -> return Nothing
+    uses0' -> 
+      let (id, _) = L.maximumBy (\(_,a) (_,b) -> compare a b) uses0' in
+      case M.lookup id maps0 of
+        Just time_prev0 -> do
+          prev0' <- enter m'maps $
+            \(CacheState (retr_state, maps, _mapsize, _uses, _incr)) ->
+              let (_, _, prev) =
+                    case M.lookup id maps of
+                      Just time_prev -> time_prev
+                      Nothing -> time_prev0
+               in return (CacheState (retr_state, M.empty, 0, ([], 0), 0), prev)
+          return $ Just (id, prev0')
+  where
+    ECM ( m'maps, _, _, _, _, _, compactlistsize, enter, read ) = ecm
+
+
+-- | List of keys in the cache map, which can contain expired values, since
+--   the list is returned without performing a time check. keys are in an
+--   unspecified order.
+--
+keysCached :: (Monad m, Ord k) => ECM m mv s M.Map k v -> m [k]
+keysCached ecm = do
+  CacheState (_, maps0, _, _, _) <- read m'maps
+  return $ M.keys maps0
+  where
+    ECM ( m'maps, _, _, _, _, _, _, _, read ) = ecm
+
+
+-- | List of keys in the cache map that are not expired values. A time check
+--   is always performed to compare the elapsed time and the cache state is not
+--   modified. The time check is not performed from within a modifying state
+--   context, e.g. not within modifyMVar with a newECMIO instance. Keys are in an
+--   unspecified order. 
+--
+keysNotExpired :: (Monad m, Ord k) => ECM m mv s M.Map k v -> m [k]
+keysNotExpired ecm = do
+  CacheState (_, maps0, _, _, _) <- read m'maps
+  current_time <- gettime
+  return $ detNotExpired current_time $ M.toList maps0
+  where
+    ECM ( m'maps, _, gettime, _, _, _, _, _, read ) = ecm
+
 
 
 {-

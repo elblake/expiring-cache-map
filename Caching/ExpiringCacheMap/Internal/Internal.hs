@@ -14,7 +14,8 @@
 module Caching.ExpiringCacheMap.Internal.Internal (
     updateUses,
     detECM,
-    getStatsString
+    getStatsString,
+    detNotExpired
 ) where
 
 import qualified Data.List as L
@@ -169,6 +170,20 @@ filterExpired' filt time =
                    (accesstime > (time - expirytime)))
 
 
+detNotExpired
+ :: TimeUnits -> [(k, (TimeUnits, TimeUnits, v))] -> [k]
+{-# INLINE detNotExpired #-}
+detNotExpired _time l = detNotExpired' _time l []
+
+{-# INLINE detNotExpired' #-}
+detNotExpired' _time [] l = reverse l
+detNotExpired'  time ((key, (accesstime, expirytime, _value)) : r) l
+  | (accesstime <= time) && (accesstime > (time - expirytime)) =
+        detNotExpired' time r (key:l)
+  | otherwise =
+        detNotExpired' time r l
+
+
 -- | Debugging function
 --
 getStatsString ecm = do
@@ -177,4 +192,6 @@ getStatsString ecm = do
   where
     ECM ( m'uses, _retr, _gettime, _minimumkeep, _timecheckmodulo, _removalsize,
           _compactlistsize, _enter, ro ) = ecm
+
+
 

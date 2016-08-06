@@ -1,5 +1,5 @@
 name:                expiring-cache-map
-version:             0.0.5.4
+version:             0.0.6.0
 synopsis:            General purpose simple caching.
 description:         
     A simple general purpose shared state cache map with automatic expiration 
@@ -50,7 +50,9 @@ test-suite test-threads
       unordered-containers >= 0.2.0.0
     other-modules:
       TestHashECMWithThreads
+      TestHashECMWithThreadsInvalidating
       TestOrdECMWithThreads
+      TestOrdECMWithThreadsInvalidating
       Caching.ExpiringCacheMap.Internal.Internal
 
 test-suite test-sequence
@@ -65,5 +67,8 @@ test-suite test-sequence
       unordered-containers >= 0.2.0.0
     other-modules:
       TestECMWithTestSequenceCommon
+      TestECMWithTestSequenceCommonInvalidating
       TestHashECMWithTestSequence
+      TestHashECMWithTestSequenceInvalidating
       TestOrdECMWithTestSequence
+      TestOrdECMWithTestSequenceInvalidating
