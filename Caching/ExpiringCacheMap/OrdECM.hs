@@ -188,7 +188,10 @@ lookupECM ecm id = do
     ECM ( m'maps, retr, gettime, minimumkeep, timecheckmodulo, removalsize,
           compactlistsize, enter, _ro ) = ecm
   
-    mnub = M.toList . M.fromList . reverse
+    -- Reversing the list first before turning into a map, so the higher value
+    -- which is at the beginning will be at the end. And fromList retains the
+    -- last value for a key in the list.
+    mnub = M.toList . M.fromList . reverse 
     lookupECM' (retr_state, maps, mapsize, uses, incr) incr' = do
       let uses' = updateUses uses id incr' compactlistsize mnub
       (ret, do_again) <- det retr_state maps mapsize uses' incr'
@@ -219,8 +222,9 @@ getValReqState ecm id = do
 
 
 -- | Invalidates a key from the cache and returns its value if any.
---   Note this is a sequential composition of a read and modify of the
---   mutable cache container (readMVar and modifyMVar with newECMIO).
+--   Note that this is a sequential composition of a read and modify of the
+--   mutable cache container (e.g. 'MV.readMVar' followed by 'MV.modifyMVar'
+--   with 'newECMIO' instances).
 --
 invalidate :: (Monad m, Ord k) => ECM m mv s M.Map k v -> k -> m (Maybe v)
 invalidate ecm id = do
@@ -241,14 +245,15 @@ invalidate ecm id = do
     ECM ( m'maps, _, _, _, _, _, compactlistsize, enter, read ) = ecm
 
 
--- | Invalidates a key from the cache and returns the last key and value if any.
---   Note this is a sequential composition of a read and modify of the
---   mutable cache container (readMVar and modifyMVar with newECMIO).
+-- | Invalidates the entire cache and returns the last key and value if any.
+--   Note that this is a sequential composition of a read and modify of the
+--   mutable cache container (e.g. 'MV.readMVar' followed by 'MV.modifyMVar'
+--   with 'newECMIO' instances).
 --
 invalidateCache :: (Monad m, Ord k) => ECM m mv s M.Map k v -> m (Maybe (k, v))
 invalidateCache ecm = do
   CacheState (_, maps0, _, (uses0, _), _) <- read m'maps
-  case (M.toList $ M.intersection (M.fromList uses0) maps0) of
+  case (M.toList $ M.intersection (M.fromList $ reverse uses0) maps0) of
     [] -> return Nothing
     uses0' -> 
       let (id, _) = L.maximumBy (\(_,a) (_,b) -> compare a b) uses0' in
@@ -266,9 +271,9 @@ invalidateCache ecm = do
     ECM ( m'maps, _, _, _, _, _, compactlistsize, enter, read ) = ecm
 
 
--- | List of keys in the cache map, which can contain expired values, since
---   the list is returned without performing a time check. keys are in an
---   unspecified order.
+-- | List of keys in the cache map without performing a time check, returning
+--   both stored keys that are expired and keys that are not expired. keys are
+--   in an unspecified order.
 --
 keysCached :: (Monad m, Ord k) => ECM m mv s M.Map k v -> m [k]
 keysCached ecm = do
@@ -279,10 +284,10 @@ keysCached ecm = do
 
 
 -- | List of keys in the cache map that are not expired values. A time check
---   is always performed to compare the elapsed time and the cache state is not
---   modified. The time check is not performed from within a modifying state
---   context, e.g. not within modifyMVar with a newECMIO instance. Keys are in an
---   unspecified order. 
+--   is always performed to compare with the elapsed time left with each key.
+--   The cache state is not modified and the time check is not performed from
+--   within a modifying state context, e.g. not within 'MV.modifyMVar' with a 
+--   'newECMIO' instance. Keys are in an unspecified order. 
 --
 keysNotExpired :: (Monad m, Ord k) => ECM m mv s M.Map k v -> m [k]
 keysNotExpired ecm = do
